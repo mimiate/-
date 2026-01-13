@@ -171,7 +171,12 @@ function showTab(t){
  graphTab.style.display = t==="graph"?"block":"none";
  document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
  event.target.classList.add("active");
+
+ if(t==="graph"){
+   setTimeout(()=>draw(),50); // 表示後に描画し直す
+ }
 }
+
 
 function setGraph(t){
  currentGraph=t;
