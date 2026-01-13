@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>かんたん家計簿</title>
+
+<link rel="manifest" href="manifest.json">
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+body { font-family: sans-serif; background:#f5f5f5; margin:0; padding:10px; }
+h2 { margin-top:20px; }
+.card { background:white; padding:10px; border-radius:10px; margin-bottom:10px; }
+button { padding:8px 12px; margin:4px; border:none; border-radius:8px; }
+.cat { background:#ddd; }
+.cat.active { background:#4caf50; color:white; }
+</style>
+</head>
+
+<body>
+
+<h2>💸 かんたん家計簿</h2>
+
+<div class="card">
+  金額：<input type="number" id="amount" style="width:100px;">
+  <div>
+    <button class="cat" onclick="setCat('食費')">🍚食費</button>
+    <button class="cat" onclick="setCat('交通')">🚃交通</button>
+    <button class="cat" onclick="setCat('生活')">🏠生活</button>
+    <button class="cat" onclick="setCat('娯楽')">🎮娯楽</button>
+    <button class="cat" onclick="setCat('医療')">💊医療</button>
+    <button class="cat" onclick="setCat('その他')">📦その他</button>
+  </div>
+  <button onclick="add()">追加</button>
+</div>
+
+<div class="card">
+  年：
+  <select id="yearSelect" onchange="draw()"></select>
+</div>
+
+<div class="card">
+  <canvas id="bar"></canvas>
+</div>
+
+<div class="card">
+  <canvas id="pie"></canvas>
+</div>
+
+<script>
+let selectedCat = "食費";
+
+function setCat(c){
+  selectedCat = c;
+  document.querySelectorAll(".cat").forEach(b=>b.classList.remove("active"));
+  event.target.classList.add("active");
+}
+
+function load(){
+  return JSON.parse(localStorage.getItem("kakeibo")||"[]");
+}
+
+function save(d){
+  localStorage.setItem("kakeibo",JSON.stringify(d));
+}
+
+function add(){
+  const amt = Number(amount.value);
+  if(!amt) return;
+  const d = load();
+  d.push({date:new Date().toISOString().slice(0,10), amount:amt, cat:selectedCat});
+  save(d);
+  amount.value="";
+  draw();
+}
+
+function draw(){
+  const data = load();
+  const y = yearSelect.value;
+  const m = Array(12).fill(0);
+  const cats = {};
+
+  data.forEach(r=>{
+    const [yy,mm] = r.date.split("-");
+    if(yy===y){
+      m[Number(mm)-1]+=r.amount;
+      cats[r.cat]=(cats[r.cat]||0)+r.amount;
+    }
+  });
+
+  barChart?.destroy();
+  pieChart?.destroy();
+
+  barChart = new Chart(bar,{
+    type:"bar",
+    data:{labels:[...Array(12)].map((_,i)=>i+1+"月"),datasets:[{data:m}]}
+  });
+
+  pieChart = new Chart(pie,{
+    type:"pie",
+    data:{labels:Object.keys(cats),datasets:[{data:Object.values(cats)}]}
+  });
+}
+
+function init(){
+  const data = load();
+  const years=[...new Set(data.map(r=>r.date.slice(0,4)))];
+  const y = new Date().getFullYear().toString();
+  if(!years.includes(y)) years.push(y);
+  yearSelect.innerHTML = years.map(v=>`<option>${v}</option>`).join("");
+  yearSelect.value=y;
+  draw();
+}
+
+let barChart,pieChart;
+init();
+</script>
+
+</body>
+</html>
