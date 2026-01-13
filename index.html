@@ -9,156 +9,232 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
-body { font-family: sans-serif; background:#f5f5f5; margin:0; padding:10px; }
-h2 { margin-top:20px; }
-.card { background:white; padding:10px; border-radius:10px; margin-bottom:10px; }
-button { padding:8px 12px; margin:4px; border:none; border-radius:8px; }
-.cat { background:#ddd; }
-.cat.active { background:#4caf50; color:white; }
+body { font-family:sans-serif; background:#f5f5f5; margin:0; padding:10px; }
+h2 { margin:10px 0; }
+.card { background:white; padding:10px; border-radius:12px; margin-bottom:10px; }
+button { padding:8px 12px; margin:4px; border:none; border-radius:10px; }
 input, select { padding:6px; margin:4px 0; }
-.list { font-size:14px; line-height:1.6; }
-.row { border-bottom:1px solid #eee; padding:4px 0; }
+
+.tab { background:#ddd; }
+.tab.active { background:#4caf50; color:white; }
+
+.cat { font-size:12px; }
+.cat.active { outline:2px solid black; }
+
+.row { border-bottom:1px solid #eee; padding:6px 0; font-size:14px; }
 .small { color:#666; font-size:12px; }
+
+.flex { display:flex; flex-wrap:wrap; }
 </style>
 </head>
 
 <body>
 
-<h2>💸 かんたん家計簿</h2>
+<h2>💸 家計簿</h2>
 
 <div class="card">
-  金額：<input type="number" id="amount" style="width:100px;"><br>
-  メモ：<input type="text" id="note" placeholder="例：スーパー、昼ごはん" style="width:90%;"><br>
+金額：<input type="number" id="amount" style="width:100px;">
+メモ：<input type="text" id="note" placeholder="例：スーパー" style="width:60%;">
+<br>
+<div class="flex" id="catButtons"></div>
+<button onclick="saveEntry()">保存</button>
+</div>
 
-  <div>
-    <button class="cat active" onclick="setCat('食費')">🍚食費</button>
-    <button class="cat" onclick="setCat('交通')">🚃交通</button>
-    <button class="cat" onclick="setCat('生活')">🏠生活</button>
-    <button class="cat" onclick="setCat('娯楽')">🎮娯楽</button>
-    <button class="cat" onclick="setCat('医療')">💊医療</button>
-    <button class="cat" onclick="setCat('その他')">📦その他</button>
+<div class="card">
+<button class="tab active" onclick="showTab('history')">履歴</button>
+<button class="tab" onclick="showTab('graph')">グラフ</button>
+</div>
+
+<!-- 履歴 -->
+<div id="historyTab" class="card"></div>
+
+<!-- グラフ -->
+<div id="graphTab" style="display:none;">
+  <div class="card">
+    年：
+    <select id="yearSelect" onchange="draw()"></select>
   </div>
 
-  <button onclick="add()">追加</button>
-</div>
+  <div class="card">
+    <button onclick="setGraph('bar')">棒グラフ</button>
+    <button onclick="setGraph('pie')">円グラフ</button>
+  </div>
 
-<div class="card">
-  年：
-  <select id="yearSelect" onchange="draw()"></select>
-</div>
+  <div class="card" id="barOptions">
+    表示：
+    <select id="barMode" onchange="draw()">
+      <option value="all">全支出</option>
+    </select>
+  </div>
 
-<div class="card">
-  <canvas id="bar"></canvas>
-</div>
-
-<div class="card">
-  <canvas id="pie"></canvas>
-</div>
-
-<div class="card">
-  <h3>📊 ジャンル別 合計（高い順）</h3>
-  <div id="catList" class="list"></div>
-</div>
-
-<div class="card">
-  <h3>📅 履歴</h3>
-  <div id="history" class="list"></div>
+  <div class="card">
+    <canvas id="chart"></canvas>
+  </div>
 </div>
 
 <script>
-let selectedCat = "食費";
-let barChart, pieChart;
+const categories = [
+ {name:"食事",color:"#ff7043"},
+ {name:"日用品",color:"#8d6e63"},
+ {name:"趣味娯楽",color:"#42a5f5"},
+ {name:"交際費",color:"#ec407a"},
+ {name:"交通費",color:"#26a69a"},
+ {name:"衣服美容",color:"#ab47bc"},
+ {name:"健康医療",color:"#66bb6a"},
+ {name:"自動車",color:"#78909c"},
+ {name:"教育",color:"#5c6bc0"},
+ {name:"特別な支出",color:"#ffa726"},
+ {name:"現金カード",color:"#d4e157"},
+ {name:"通信費",color:"#29b6f6"},
+ {name:"住宅",color:"#8d6e63"},
+ {name:"保険",color:"#26c6da"},
+ {name:"その他",color:"#bdbdbd"}
+];
 
-function setCat(c){
-  selectedCat = c;
-  document.querySelectorAll(".cat").forEach(b=>b.classList.remove("active"));
-  event.target.classList.add("active");
+let selectedCat = categories[0].name;
+let editIndex = null;
+let currentGraph = "bar";
+let chartObj = null;
+
+const catButtons = document.getElementById("catButtons");
+categories.forEach(c=>{
+ const b=document.createElement("button");
+ b.textContent=c.name;
+ b.className="cat";
+ b.style.background=c.color;
+ b.onclick=()=>selectCat(c.name,b);
+ catButtons.appendChild(b);
+});
+catButtons.firstChild.classList.add("active");
+
+function selectCat(name,btn){
+ selectedCat=name;
+ document.querySelectorAll(".cat").forEach(b=>b.classList.remove("active"));
+ btn.classList.add("active");
 }
 
 function load(){
-  return JSON.parse(localStorage.getItem("kakeibo")||"[]");
+ return JSON.parse(localStorage.getItem("kakeibo")||"[]");
 }
-
 function save(d){
-  localStorage.setItem("kakeibo",JSON.stringify(d));
+ localStorage.setItem("kakeibo",JSON.stringify(d));
 }
 
-function add(){
-  const amt = Number(amount.value);
-  if(!amt) return;
+function saveEntry(){
+ const amt=Number(amount.value);
+ if(!amt) return;
+ const d=load();
+ const entry={
+   date:new Date().toISOString().slice(0,10),
+   amount:amt, cat:selectedCat, note:note.value||""
+ };
+ if(editIndex!==null){
+   d[editIndex]=entry;
+   editIndex=null;
+ }else{
+   d.push(entry);
+ }
+ save(d);
+ amount.value=""; note.value="";
+ drawHistory(); draw();
+}
 
-  const d = load();
-  d.push({
-    date:new Date().toISOString().slice(0,10),
-    amount:amt,
-    cat:selectedCat,
-    note: note.value || ""
-  });
+function drawHistory(){
+ const d=load().sort((a,b)=>b.date.localeCompare(a.date));
+ const div=document.getElementById("historyTab");
+ div.innerHTML="<h3>📅 履歴</h3>"+d.map((r,i)=>`
+ <div class="row">
+ ${r.date} ${r.cat} ¥${r.amount.toLocaleString()}<br>
+ <span class="small">${r.note}</span><br>
+ <button onclick="edit(${i})">編集</button>
+ <button onclick="del(${i})">削除</button>
+ </div>`).join("");
+}
 
-  save(d);
-  amount.value="";
-  note.value="";
-  draw();
+function edit(i){
+ const d=load();
+ const r=d[i];
+ amount.value=r.amount;
+ note.value=r.note;
+ selectedCat=r.cat;
+ editIndex=i;
+}
+
+function del(i){
+ if(!confirm("削除しますか？")) return;
+ const d=load(); d.splice(i,1); save(d);
+ drawHistory(); draw();
+}
+
+function showTab(t){
+ historyTab.style.display = t==="history"?"block":"none";
+ graphTab.style.display = t==="graph"?"block":"none";
+ document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
+ event.target.classList.add("active");
+}
+
+function setGraph(t){
+ currentGraph=t;
+ barOptions.style.display = t==="bar"?"block":"none";
+ draw();
 }
 
 function draw(){
-  const data = load();
-  const y = yearSelect.value;
+ const data=load();
+ const y=yearSelect.value;
+ const monthly={};
+ categories.forEach(c=>monthly[c.name]=Array(12).fill(0));
+ data.forEach(r=>{
+   if(r.date.startsWith(y)){
+     const m=Number(r.date.slice(5,7))-1;
+     monthly[r.cat][m]+=r.amount;
+   }
+ });
 
-  const monthly = Array(12).fill(0);
-  const cats = {};
-  const history = [];
+ chartObj?.destroy();
 
-  data.forEach(r=>{
-    const [yy,mm] = r.date.split("-");
-    if(yy===y){
-      monthly[Number(mm)-1]+=r.amount;
-      cats[r.cat]=(cats[r.cat]||0)+r.amount;
-      history.push(r);
-    }
-  });
-
-  // グラフ
-  barChart?.destroy();
-  pieChart?.destroy();
-
-  barChart = new Chart(bar,{
-    type:"bar",
-    data:{labels:[...Array(12)].map((_,i)=>i+1+"月"),datasets:[{data:monthly}]}
-  });
-
-  pieChart = new Chart(pie,{
-    type:"pie",
-    data:{labels:Object.keys(cats),datasets:[{data:Object.values(cats)}]}
-  });
-
-  // ジャンル別リスト（高い順）
-  const catSorted = Object.entries(cats).sort((a,b)=>b[1]-a[1]);
-  catList.innerHTML = catSorted.map(
-    ([k,v])=>`<div class="row">${k}：¥${v.toLocaleString()}</div>`
-  ).join("");
-
-  // 履歴（日付新しい順）
-  history.sort((a,b)=>b.date.localeCompare(a.date));
-  historyDiv.innerHTML = history.map(r=>
-    `<div class="row">
-      ${r.date}　${r.cat}　¥${r.amount.toLocaleString()}<br>
-      <span class="small">${r.note}</span>
-    </div>`
-  ).join("");
+ if(currentGraph==="pie"){
+   const totals={};
+   categories.forEach(c=>totals[c.name]=monthly[c.name].reduce((a,b)=>a+b,0));
+   chartObj=new Chart(chart,{
+     type:"pie",
+     data:{
+       labels:Object.keys(totals),
+       datasets:[{data:Object.values(totals),
+         backgroundColor:categories.map(c=>c.color)}]
+     }
+   });
+ }else{
+   const mode=barMode.value;
+   let datasets=[];
+   if(mode==="all"){
+     const all=Array(12).fill(0);
+     categories.forEach(c=>monthly[c.name].forEach((v,i)=>all[i]+=v));
+     datasets=[{label:"全支出",data:all}];
+   }else{
+     datasets=[{label:mode,data:monthly[mode]}];
+   }
+   chartObj=new Chart(chart,{
+     type:"bar",
+     data:{labels:[...Array(12)].map((_,i)=>i+1+"月"),datasets}
+   });
+ }
 }
 
 function init(){
-  const data = load();
-  const years=[...new Set(data.map(r=>r.date.slice(0,4)))];
-  const y = new Date().getFullYear().toString();
-  if(!years.includes(y)) years.push(y);
-  yearSelect.innerHTML = years.map(v=>`<option>${v}</option>`).join("");
-  yearSelect.value=y;
-  draw();
+ const data=load();
+ const years=[...new Set(data.map(r=>r.date.slice(0,4)))];
+ const y=new Date().getFullYear().toString();
+ if(!years.includes(y)) years.push(y);
+ yearSelect.innerHTML=years.map(v=>`<option>${v}</option>`).join("");
+ yearSelect.value=y;
+
+ barMode.innerHTML='<option value="all">全支出</option>'+
+   categories.map(c=>`<option>${c.name}</option>`).join("");
+
+ drawHistory(); draw();
 }
 
-const historyDiv = document.getElementById("history");
 init();
 </script>
 
