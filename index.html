@@ -6,7 +6,6 @@
 <title>かんたん家計簿</title>
 
 <link rel="manifest" href="manifest.json">
-
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
@@ -16,6 +15,10 @@ h2 { margin-top:20px; }
 button { padding:8px 12px; margin:4px; border:none; border-radius:8px; }
 .cat { background:#ddd; }
 .cat.active { background:#4caf50; color:white; }
+input, select { padding:6px; margin:4px 0; }
+.list { font-size:14px; line-height:1.6; }
+.row { border-bottom:1px solid #eee; padding:4px 0; }
+.small { color:#666; font-size:12px; }
 </style>
 </head>
 
@@ -24,15 +27,18 @@ button { padding:8px 12px; margin:4px; border:none; border-radius:8px; }
 <h2>💸 かんたん家計簿</h2>
 
 <div class="card">
-  金額：<input type="number" id="amount" style="width:100px;">
+  金額：<input type="number" id="amount" style="width:100px;"><br>
+  メモ：<input type="text" id="note" placeholder="例：スーパー、昼ごはん" style="width:90%;"><br>
+
   <div>
-    <button class="cat" onclick="setCat('食費')">🍚食費</button>
+    <button class="cat active" onclick="setCat('食費')">🍚食費</button>
     <button class="cat" onclick="setCat('交通')">🚃交通</button>
     <button class="cat" onclick="setCat('生活')">🏠生活</button>
     <button class="cat" onclick="setCat('娯楽')">🎮娯楽</button>
     <button class="cat" onclick="setCat('医療')">💊医療</button>
     <button class="cat" onclick="setCat('その他')">📦その他</button>
   </div>
+
   <button onclick="add()">追加</button>
 </div>
 
@@ -49,8 +55,19 @@ button { padding:8px 12px; margin:4px; border:none; border-radius:8px; }
   <canvas id="pie"></canvas>
 </div>
 
+<div class="card">
+  <h3>📊 ジャンル別 合計（高い順）</h3>
+  <div id="catList" class="list"></div>
+</div>
+
+<div class="card">
+  <h3>📅 履歴</h3>
+  <div id="history" class="list"></div>
+</div>
+
 <script>
 let selectedCat = "食費";
+let barChart, pieChart;
 
 function setCat(c){
   selectedCat = c;
@@ -69,39 +86,66 @@ function save(d){
 function add(){
   const amt = Number(amount.value);
   if(!amt) return;
+
   const d = load();
-  d.push({date:new Date().toISOString().slice(0,10), amount:amt, cat:selectedCat});
+  d.push({
+    date:new Date().toISOString().slice(0,10),
+    amount:amt,
+    cat:selectedCat,
+    note: note.value || ""
+  });
+
   save(d);
   amount.value="";
+  note.value="";
   draw();
 }
 
 function draw(){
   const data = load();
   const y = yearSelect.value;
-  const m = Array(12).fill(0);
+
+  const monthly = Array(12).fill(0);
   const cats = {};
+  const history = [];
 
   data.forEach(r=>{
     const [yy,mm] = r.date.split("-");
     if(yy===y){
-      m[Number(mm)-1]+=r.amount;
+      monthly[Number(mm)-1]+=r.amount;
       cats[r.cat]=(cats[r.cat]||0)+r.amount;
+      history.push(r);
     }
   });
 
+  // グラフ
   barChart?.destroy();
   pieChart?.destroy();
 
   barChart = new Chart(bar,{
     type:"bar",
-    data:{labels:[...Array(12)].map((_,i)=>i+1+"月"),datasets:[{data:m}]}
+    data:{labels:[...Array(12)].map((_,i)=>i+1+"月"),datasets:[{data:monthly}]}
   });
 
   pieChart = new Chart(pie,{
     type:"pie",
     data:{labels:Object.keys(cats),datasets:[{data:Object.values(cats)}]}
   });
+
+  // ジャンル別リスト（高い順）
+  const catSorted = Object.entries(cats).sort((a,b)=>b[1]-a[1]);
+  catList.innerHTML = catSorted.map(
+    ([k,v])=>`<div class="row">${k}：¥${v.toLocaleString()}</div>`
+  ).join("");
+
+  // 履歴（日付新しい順）
+  history.sort((a,b)=>b.date.localeCompare(a.date));
+  historyDiv.innerHTML = history.map(r=>
+    `<div class="row">
+      ${r.date}　${r.cat}　¥${r.amount.toLocaleString()}<br>
+      <span class="small">${r.note}</span>
+    </div>`
+  ).join("");
 }
 
 function init(){
@@ -114,7 +158,7 @@ function init(){
   draw();
 }
 
-let barChart,pieChart;
+const historyDiv = document.getElementById("history");
 init();
 </script>
 
